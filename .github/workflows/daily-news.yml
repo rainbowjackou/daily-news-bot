@@ -1,0 +1,53 @@
+name: 每日新闻简报
+
+on:
+  # 定时触发：每天 UTC 00:00 = 北京时间 08:00
+  schedule:
+    - cron: '0 0 * * *'
+  # 允许手动触发，方便测试
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  news-digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # dsh-rss-digest 要求 Node >= 22.18
+      - name: 安装 Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 订阅 RSS 新闻源（增删源请编辑 scripts/add-sources.mjs）
+        run: npm run add-sources
+
+      - name: 抓取新闻（自动去重）
+        run: npm run fetch
+
+      - name: 生成 DeepSeek 摘要简报
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: npm run digest
+
+      - name: 推送到飞书群
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+        run: npm run send-feishu
+
+      - name: 上传简报存档（可在 Actions 运行详情页下载）
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-digest
+          path: digest.md
+          if-no-files-found: error

@@ -1,0 +1,33 @@
+# 本地 DSH Web 备选方案：dsh-rss-digest 插件配置示例
+# 用法：复制本文件到 ~/.dsh/profiles/web/cordis.patch.yml，然后重启 dsh web
+# 所有字段均可省略，省略时用插件默认值。详见 dsh-rss-digest 的 README。
+- id: rss-digest
+  config:
+    # 初始订阅源（也可以在对话中用 rss_add 工具动态添加）
+    sources:
+      - url: https://feeds.bbci.co.uk/news/rss.xml
+        title: BBC
+      - url: https://www.theguardian.com/world/rss
+        title: The Guardian
+      - url: https://rsshub.app/36kr/newsflashes
+        title: 36氪快讯
+      - url: https://rsshub.app/zhihu/hotlist
+        title: 知乎热榜
+      - url: https://rsshub.app/bilibili/ranking/0/3
+        title: B站排行榜
+    # 周期抓取：每 60 分钟一轮，启动后约 10 秒先抓一轮
+    fetch:
+      intervalMinutes: 60
+      onStartup: true
+    # AI 摘要：中文、批量模式（每份简报一次模型调用，省 token）
+    summary:
+      language: zh
+      mode: batch
+      maxLength: 800
+    # 每日简报：北京时间 08:00 生成；deliverTo: both = 实时会话 + 本地文件 digests/<日期>.md
+    digest:
+      enabled: true
+      time: '08:00'
+      timezone: Asia/Shanghai
+      maxItems: 20
+      deliverTo: both
