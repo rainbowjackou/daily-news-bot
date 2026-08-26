@@ -216,33 +216,53 @@ ${feedText}
 6. 保证 Markdown 格式正确；某分类无合适内容时省略该分类`;
 }
 
+async function callModel(model, messages, maxTokens) {
+  const res = await fetch(`${API_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.3,
+      max_tokens: maxTokens,
+      stream: false,
+    }),
+    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}: ${body.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) throw new Error('模型返回为空');
+  return content;
+}
+
 async function callDeepSeek(prompt) {
   // DEEPSEEK_MODEL 支持逗号分隔多个模型（如 minimax/minimax-m3:free,nvidia/...:free）：
   // 按顺序尝试，某个模型限流/失败时自动切换下一个，全部失败才抛错降级。
+  // 单模型输出若被 max_tokens 截断（缺少"后市研判"章节），自动续写补全。
   let lastErr = null;
   for (const model of MODELS) {
     try {
-      const res = await fetch(`${API_BASE}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
-        body: JSON.stringify({
+      let full = await callModel(model, [{ role: 'user', content: prompt }], Number(process.env.LLM_MAX_TOKENS || 8192));
+      log(`[AI] 模型 ${model} 生成 ${full.length} 字符`);
+      if (!full.includes('后市研判') && !full.includes('结论')) {
+        log('[AI] 输出可能不完整（缺后市研判），尝试续写补全...');
+        const cont = await callModel(
           model,
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.3,
-          max_tokens: 4096,
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
-      });
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status}: ${body.slice(0, 300)}`);
+          [
+            { role: 'user', content: prompt },
+            { role: 'assistant', content: full },
+            { role: 'user', content: '你的输出不完整，缺少"后市研判"章节。请直接从缺失部分继续输出（结论/依据/风险提示），不要重复已有内容。' },
+          ],
+          4096
+        );
+        full = full.replace(/\s+$/, '') + '\n\n' + cont;
+        log(`[AI] 续写完成，共 ${full.length} 字符`);
       }
-      const data = await res.json();
-      const content = data?.choices?.[0]?.message?.content;
-      if (!content) throw new Error('模型返回为空');
-      log(`[AI] 模型 ${model} 生成成功`);
-      return content.trim().replace(/^```(?:markdown)?\s*|```$/g, '').trim();
+      return full.trim().replace(/^```(?:markdown)?\s*|```$/g, '').trim();
     } catch (e) {
       lastErr = e;
       log(`[AI] 模型 ${model} 调用失败（${e.message}），${MODELS.length > 1 ? '尝试下一个模型' : '降级'}`);
