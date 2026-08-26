@@ -8,7 +8,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # 需要写权限：把简报归档提交回仓库（保持仓库活跃，避免 GitHub 60 天无活动暂停定时任务）
+  contents: write
 
 jobs:
   news-digest:
@@ -39,6 +40,18 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: npm run format
+
+      - name: 归档简报并提交回仓库（digests/ 永久留存 + 保持仓库活跃）
+        run: |
+          git config user.name "daily-news-bot[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add digests/
+          if git diff --cached --quiet; then
+            echo "无新简报变更，跳过提交"
+          else
+            git commit -m "docs: 每日新闻简报归档 $(date +%Y-%m-%d)"
+            git push
+          fi
 
       - name: 推送到飞书群
         env:

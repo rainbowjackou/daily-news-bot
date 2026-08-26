@@ -12,7 +12,11 @@
  *   NEWS_MAX_TOTAL     （可选）进入 LLM 的新闻总条数上限，默认 50
  * 退出码: 0 正常（含 AI 降级）；1 = store 无新闻或读取失败
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);
@@ -306,6 +310,17 @@ async function main() {
 
   const digest = header + marketSection + (marketSection ? '\n' : '') + body + '\n';
   writeFileSync(OUT, digest);
+  // 同时归档到 digests/<北京时间日期>.md（提交回仓库：永久留存 + 保持仓库活跃，避免 GitHub 暂停定时任务）
+  const dateKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  const archiveDir = path.resolve(__dirname, '..', 'digests');
+  mkdirSync(archiveDir, { recursive: true });
+  writeFileSync(path.join(archiveDir, `${dateKey}.md`), digest);
+  log(`[归档] digests/${dateKey}.md`);
   log(`[写入] ${OUT}（${items.length} 条新闻${degraded ? '，AI 降级' : ''}）`);
   log('=== 简报生成结束 ===');
 }

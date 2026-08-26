@@ -11,6 +11,8 @@ GitHub Actions 定时 (cron 0 0 * * * = UTC 00:00 = 北京 08:00)
    ├─ fetch-markets.mjs   全球行情（新浪+腾讯+东方财富三源交叉核验）→ markets.json
    ├─ format-digest.mjs   市场速览（脚本渲染）+ DeepSeek 财经要闻/国内/国际/后市研判 → digest.md
    └─ send-feishu.mjs     推送到飞书群 Webhook（自动分片）
+
+简报同时归档到 `digests/YYYY-MM-DD.md` 并自动提交回本仓库：一是历史简报永久留存，二是每次运行都会产生提交、保持仓库活跃，避免 GitHub 因仓库 60 天无活动而暂停定时任务。
 ```
 
 ---
