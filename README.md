@@ -51,7 +51,7 @@ GitHub Actions 定时 (cron 0 0 * * * = UTC 00:00 = 北京 08:00)
 |---|---|
 | `DEEPSEEK_API_KEY` | 大模型 API Key（任选其一）：**DeepSeek**（platform.deepseek.com）或 **OpenRouter**（openrouter.ai/keys，免费模型可用，如 `minimax/minimax-m3:free`） |
 | `DEEPSEEK_BASE_URL` | 可选，模型 API 地址。DeepSeek 用默认即可（不填）；**OpenRouter 填 `https://openrouter.ai/api/v1`** |
-| `DEEPSEEK_MODEL` | 可选，模型名。DeepSeek 用默认即可（不填）；**OpenRouter 填模型 id，如 `minimax/minimax-m3:free`** |
+| `DEEPSEEK_MODEL` | 可选，模型名。DeepSeek 用默认即可（不填）；**OpenRouter 填模型 id**。支持逗号分隔多个模型按序自动切换（第一个限流/失败自动用下一个），如 `minimax/minimax-m3:free,nvidia/nemotron-3-super-120b-a12b:free` |
 | `FEISHU_WEBHOOK` | 飞书群机器人 Webhook（`https://open.feishu.cn/open-apis/bot/v2/hook/xxx`） |
 
 > 飞书群机器人：飞书群设置 → 群机器人 → 添加机器人 → 自定义机器人 → 复制 Webhook。
