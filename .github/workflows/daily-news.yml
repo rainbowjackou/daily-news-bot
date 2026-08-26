@@ -39,6 +39,8 @@ jobs:
       - name: 生成简报（市场速览 + 财经要闻/国内/国际/后市研判）
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_BASE_URL: ${{ secrets.DEEPSEEK_BASE_URL }}
+          DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
         run: npm run format
 
       - name: 归档简报并提交回仓库（digests/ 永久留存 + 保持仓库活跃）
