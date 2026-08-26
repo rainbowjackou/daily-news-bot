@@ -11,10 +11,14 @@
         title: The Guardian
       - url: https://rsshub.app/36kr/newsflashes
         title: 36氪快讯
+      - url: https://rsshub.app/ithome
+        title: IT之家
       - url: https://rsshub.app/zhihu/hotlist
         title: 知乎热榜
       - url: https://rsshub.app/bilibili/ranking/0/3
         title: B站排行榜
+      - url: https://rsshub.app/caixin/latest
+        title: 财新网
     # 周期抓取：每 60 分钟一轮，启动后约 10 秒先抓一轮
     fetch:
       intervalMinutes: 60

@@ -8,8 +8,8 @@
 GitHub Actions 定时 (cron 0 0 * * * = UTC 00:00 = 北京 08:00)
    │
    ├─ dsh-rss-digest add     订阅 RSS 源（scripts/add-sources.mjs 里配置）
-   ├─ dsh-rss-digest fetch   抓取 + 相似去重
-   ├─ dsh-rss-digest digest  DeepSeek 批量摘要 → digest.md（DeepSeek API）
+   ├─ dsh-rss-digest fetch   抓取 + 相似去重（单源失败容错，不中断）
+   ├─ format-digest.mjs      DeepSeek 四段式简报（头条/科技/其他/洞察）→ digest.md
    └─ send-feishu.mjs        推送到飞书群 Webhook（自动分片）
 ```
 
@@ -127,7 +127,8 @@ cp config/local-rss-digest.patch.yml ~/.dsh/profiles/web/cordis.patch.yml
 | 手动 Run workflow 后报 `DEEPSEEK_API_KEY` 相关错误 | Secrets 未配置或名字拼错；检查 Settings → Secrets and variables |
 | 简报生成了但飞书没收到 | `FEISHU_WEBHOOK` Secret 缺失/拼错；或机器人被移出群；看日志里 `推送到飞书群` 步骤的报错 |
 | 简报内容是原文摘要而非 AI 摘要 | `DEEPSEEK_API_KEY` 缺失，CLI 自动降级（设计如此，保证不中断） |
-| 某些源 0 条 | 该源失效（尤其 rsshub.app 公共实例）；不阻塞整体运行 |
+| 某些源 0 条 | 该源失效（尤其 rsshub.app 公共实例）；fetch 已容错，单源失败不会导致工作流失败 |
+| 简报是原文速览而非四段式 AI 简报 | `DEEPSEEK_API_KEY` 缺失或调用失败，format 步骤自动降级为原文速览（设计如此，保证不中断）；检查日志中 format 步骤的警告 |
 | 想立即手动跑一次 | Actions → 每日新闻简报 → Run workflow |
 | 简报文件为空 | 所有源都挂了；`digest.md` 会显示 0 条目，飞书照常推送（可接受），或加几个稳定源 |
 | 本地 `npm i` / `npm ci` 报 `EPERM ... ~/.npm/_cacache` | 本机 `~/.npm` 缓存里有 root 属主文件（历史 npm bug 遗留）。临时绕过：加 `--cache <某目录>`；永久修复：`sudo chown -R 501:20 ~/.npm` |

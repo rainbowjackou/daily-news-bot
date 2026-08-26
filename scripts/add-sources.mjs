@@ -6,8 +6,10 @@ const SOURCES = [
   // 注意：rsshub.app 是公共实例，经常限流或失效（知乎/B站/36氪没有官方 RSS）。
   // 失效的表现是这几个源抓到 0 条，不影响其他源。可替换为自建 RSSHub 或其他源。
   { url: 'https://rsshub.app/36kr/newsflashes', title: '36氪快讯' },
+  { url: 'https://rsshub.app/ithome', title: 'IT之家' },
   { url: 'https://rsshub.app/zhihu/hotlist', title: '知乎热榜' },
   { url: 'https://rsshub.app/bilibili/ranking/0/3', title: 'B站排行榜' },
+  { url: 'https://rsshub.app/caixin/latest', title: '财新网' },
 ];
 
 import { spawnSync } from 'node:child_process';
