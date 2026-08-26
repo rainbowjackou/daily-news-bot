@@ -7,10 +7,9 @@
 ```
 GitHub Actions 定时 (cron 0 0 * * * = UTC 00:00 = 北京 08:00)
    │
-   ├─ dsh-rss-digest add     订阅 RSS 源（scripts/add-sources.mjs 里配置）
-   ├─ dsh-rss-digest fetch   抓取 + 相似去重（单源失败容错，不中断）
-   ├─ format-digest.mjs      DeepSeek 四段式简报（头条/科技/其他/洞察）→ digest.md
-   └─ send-feishu.mjs        推送到飞书群 Webhook（自动分片）
+   ├─ fetch-sources.mjs   抓取 RSS（浏览器 UA、每源容错）→ store.json
+   ├─ format-digest.mjs   DeepSeek 四段式简报（头条/科技/其他/洞察）→ digest.md
+   └─ send-feishu.mjs     推送到飞书群 Webhook（自动分片）
 ```
 
 ---
@@ -76,26 +75,31 @@ git push -u origin main
 
 ## 📝 修改新闻源
 
-编辑 `scripts/add-sources.mjs` 顶部的 `SOURCES` 数组，推送到 main 即生效：
+编辑 `scripts/fetch-sources.mjs` 顶部的 `SOURCES` 数组，推送到 main 即生效：
 
 ```js
 const SOURCES = [
-  { url: 'https://feeds.bbci.co.uk/news/rss.xml', title: 'BBC' },
-  { url: 'https://www.theguardian.com/world/rss', title: 'The Guardian' },
+  { url: 'https://feeds.bbci.co.uk/news/rss.xml', name: 'BBC News' },
+  { url: 'https://www.theguardian.com/world/rss', name: '卫报' },
+  { url: 'https://www.ithome.com/rss/', name: 'IT之家' },
+  { url: 'https://sspai.com/feed', name: '少数派' },
+  { url: 'https://www.solidot.org/index.rss', name: 'Solidot 奇客资讯' },
+  { url: 'https://rsshub.app/36kr/newsflashes', name: '36氪快讯', rsshub: true }, // 无官方 RSS，走 RSSHub
   // 增删在这里...
 ];
 ```
 
 ### 源可用性说明（重要）
 
-- **BBC / The Guardian**：官方 RSS，稳定。
-- **rsshub.app 公共实例**（36氪/知乎/B站等无官方 RSS 的站）：公共实例**经常限流或失效**，这是常见现象。失效时这几个源抓到 0 条，**不影响其他源和整个工作流**（不会中断）。想要稳定可自建 RSSHub，或换其他可用源（如 IT 之家官网 RSS、各站官方 feed）。
+- **BBC / 卫报**：官方 RSS。抓取使用浏览器 UA，正常稳定；个别时段被源站反爬拦截时该源 0 条，不影响整体。
+- **IT之家 / 少数派 / Solidot**：官方 RSS，较稳定，是中文科技内容的主力。
+- **rsshub.app 公共实例**（36氪/知乎/B站/财新等无官方 RSS 的站）：公共实例对**云机房 IP 经常 403/限流**，在 GitHub Actions 里可能长期抓不到。脚本内置备选公共实例自动 fallback（`RSSHUB_FALLBACK_HOSTS`），但仍可能全部失败——**这几个源抓到 0 条不影响整体**。想要稳定：自建 RSSHub（推荐），或删掉这些源。
 
 ---
 
 ## 💻 本地 DSH Web 备选方案（可选，用于手动/测试）
 
-> ✅ **本机已完成（2026-08-25）**：插件已装入 web profile、4 个 peer 依赖已补装、`cordis.patch.yml` 已配置好订阅源与每日 08:00 调度（已通过 `dsh --profile web --dump-config` 验证合成结果）。**你只需重启 `dsh web` 即可生效**（重启后当前 Web 会话会断开，属正常）。
+> ⚠️ **注意（2026-08-26 核实）**：web profile 的 `cordis.patch.yml` 目前仍是默认空配置，`dsh-rss-digest` 插件也尚未装入 profile（`dsh plugin` 依赖 pnpm，本机未装）。配置示例已放在仓库 `config/local-rss-digest.patch.yml`，按下面步骤操作即可启用本地备选方案。
 
 云端 GitHub Actions 是主力；如果你想在本地 DSH Web 界面里也能聊着天生成简报，可以装 bundle：
 

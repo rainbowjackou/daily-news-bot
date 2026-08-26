@@ -8,6 +8,7 @@
   },
   "scripts": {
     "add-sources": "node scripts/add-sources.mjs",
+    "fetch-sources": "node scripts/fetch-sources.mjs",
     "fetch": "dsh-rss-digest fetch --db ./store.json",
     "digest": "dsh-rss-digest digest --db ./store.json --lang zh --out digest.md --timezone Asia/Shanghai",
     "format": "node scripts/format-digest.mjs --db ./store.json --out digest.md",

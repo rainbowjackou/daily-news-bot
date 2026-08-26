@@ -29,11 +29,8 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
-      - name: 订阅 RSS 新闻源（增删源请编辑 scripts/add-sources.mjs）
-        run: npm run add-sources
-
-      - name: 抓取新闻（自动去重；单个源失败不中断，如 rsshub 公共实例限流）
-        run: npm run fetch || echo "⚠️ 部分新闻源抓取失败，继续（后续步骤会校验是否有可用新闻）"
+      - name: 抓取新闻源（浏览器 UA、每源容错；源列表在 scripts/fetch-sources.mjs 顶部）
+        run: npm run fetch-sources
 
       - name: 生成四段式简报（今日头条/科技财经/其他要闻/今日洞察）
         env:
