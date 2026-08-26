@@ -7,7 +7,7 @@
  * 用法: node scripts/format-digest.mjs --db ./store.json --out digest.md
  * 环境变量:
  *   DEEPSEEK_API_KEY   （推荐）DeepSeek API Key；未设置或调用失败时降级为原文速览
- *   DEEPSEEK_MODEL     （可选）模型名，默认 deepseek-chat
+ *   DEEPSEEK_MODEL     （可选）模型名，默认 deepseek-chat；支持逗号分隔多个模型按序自动切换（如 minimax/minimax-m3:free,nvidia/nemotron-3-super-120b-a12b:free）
  *   DEEPSEEK_BASE_URL  （可选）API 地址，默认 https://api.deepseek.com
  *   NEWS_MAX_TOTAL     （可选）进入 LLM 的新闻总条数上限，默认 50
  * 退出码: 0 正常（含 AI 降级）；1 = store 无新闻或读取失败
@@ -27,7 +27,7 @@ const DB = arg('--db', './store.json');
 const MARKETS = arg('--markets', './markets.json');
 const OUT = arg('--out', 'digest.md');
 const API_KEY = process.env.DEEPSEEK_API_KEY || '';
-const MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
+const MODELS = (process.env.DEEPSEEK_MODEL || 'deepseek-chat').split(',').map((s) => s.trim()).filter(Boolean);
 const API_BASE = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
 const MAX_TOTAL = Number(process.env.NEWS_MAX_TOTAL || 50);
 const MAX_ITEM_AGE_HOURS = 48;
@@ -217,26 +217,38 @@ ${feedText}
 }
 
 async function callDeepSeek(prompt) {
-  const res = await fetch(`${API_BASE}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
-    body: JSON.stringify({
-      model: MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      max_tokens: 4096,
-      stream: false,
-    }),
-    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`DeepSeek API HTTP ${res.status}: ${body.slice(0, 300)}`);
+  // DEEPSEEK_MODEL 支持逗号分隔多个模型（如 minimax/minimax-m3:free,nvidia/...:free）：
+  // 按顺序尝试，某个模型限流/失败时自动切换下一个，全部失败才抛错降级。
+  let lastErr = null;
+  for (const model of MODELS) {
+    try {
+      const res = await fetch(`${API_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.3,
+          max_tokens: 4096,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${body.slice(0, 300)}`);
+      }
+      const data = await res.json();
+      const content = data?.choices?.[0]?.message?.content;
+      if (!content) throw new Error('模型返回为空');
+      log(`[AI] 模型 ${model} 生成成功`);
+      return content.trim().replace(/^```(?:markdown)?\s*|```$/g, '').trim();
+    } catch (e) {
+      lastErr = e;
+      log(`[AI] 模型 ${model} 调用失败（${e.message}），${MODELS.length > 1 ? '尝试下一个模型' : '降级'}`);
+    }
   }
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('DeepSeek 返回为空');
-  return content.trim().replace(/^```(?:markdown)?\s*|```$/g, '').trim();
+  throw lastErr;
 }
 
 /* ------------------------------ 降级（AI 不可用） ------------------------------ */
