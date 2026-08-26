@@ -19,17 +19,29 @@ const BROWSER_UA =
 
 const FETCH_TIMEOUT_MS = 20000;
 
-// 可靠官方源
+// 新闻源（max 表示每源最多条数；未写用默认 MAX_ITEMS_PER_SOURCE）
 const SOURCES = [
-  { url: 'https://feeds.bbci.co.uk/news/rss.xml', name: 'BBC News' },
-  { url: 'https://www.theguardian.com/world/rss', name: '卫报' },
+  // ── 国际财经（强化财金报道）──
+  { url: 'https://feeds.bbci.co.uk/news/business/rss.xml', name: 'BBC商业' },
+  { url: 'https://www.theguardian.com/business/rss', name: '卫报商业' },
+  { url: 'https://www.cnbc.com/id/100003114/device/rss/rss.html', name: 'CNBC头条' },
+  { url: 'https://www.cnbc.com/id/10001147/device/rss/rss.html', name: 'CNBC经济' },
+  // ── 国内权威（强化国内新闻）──
+  { url: 'http://www.people.com.cn/rss/finance.xml', name: '人民网财经' },
+  { url: 'http://www.people.com.cn/rss/politics.xml', name: '人民网时政' },
+  { url: 'http://www.people.com.cn/rss/world.xml', name: '人民网国际' },
+  { url: 'https://www.chinanews.com.cn/rss/scroll-news.xml', name: '中新网即时' },
+  { url: 'https://www.chinanews.com.cn/rss/finance.xml', name: '中新网财经' },
+  // ── 综合/科技（综合源降权，减少个人新闻占比）──
+  { url: 'https://feeds.bbci.co.uk/news/rss.xml', name: 'BBC综合', max: 6 },
+  { url: 'https://www.theguardian.com/world/rss', name: '卫报世界', max: 6 },
   { url: 'https://www.ithome.com/rss/', name: 'IT之家' },
   { url: 'https://sspai.com/feed', name: '少数派' },
   { url: 'https://www.solidot.org/index.rss', name: 'Solidot 奇客资讯' },
-  // 以下无官方 RSS，走 RSSHub 公共实例（云机房常 403，失败不影响整体）
+  // ── RSSHub（无官方 RSS 的站，公共实例常限流，失败不影响整体）──
   { url: 'https://rsshub.app/36kr/newsflashes', name: '36氪快讯', rsshub: true },
   { url: 'https://rsshub.app/zhihu/hotlist', name: '知乎热榜', rsshub: true },
-  { url: 'https://rsshub.app/bilibili/ranking/0/3', name: 'B站排行榜', rsshub: true },
+  { url: 'https://rsshub.app/bilibili/ranking/0/3', name: 'B站排行榜', rsshub: true, max: 5 },
   { url: 'https://rsshub.app/caixin/latest', name: '财新网', rsshub: true },
 ];
 
@@ -152,7 +164,7 @@ async function main() {
   for (const source of SOURCES) {
     try {
       const { xml } = await fetchOne(source);
-      const items = parseFeed(xml).slice(0, MAX_ITEMS_PER_SOURCE);
+      const items = parseFeed(xml).slice(0, source.max || MAX_ITEMS_PER_SOURCE);
       log(`[抓取] ${source.name}: ${items.length} 条`);
       for (const it of items) {
         allItems.push({ ...it, sourceId: sourceId(source.url), sourceName: source.name });
@@ -168,17 +180,29 @@ async function main() {
     process.exit(1);
   }
 
-  // 去重（按规范化标题）
+  // 多源交叉统计：同一新闻出现在多个源 → 标记（新闻准确性交叉效验）
+  const titleMap = new Map(); // 规范化标题 -> { sources:Set }
+  for (const it of allItems) {
+    const key = it.title.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+    if (!key) continue;
+    if (!titleMap.has(key)) titleMap.set(key, { sources: new Set() });
+    titleMap.get(key).sources.add(it.sourceName);
+  }
+
+  // 去重（按规范化标题；保留多源信息）
   const seen = new Set();
   const unique = [];
   for (const it of allItems) {
     const key = it.title.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
     if (!key || seen.has(key)) continue;
     seen.add(key);
+    const rec = titleMap.get(key);
+    it.allSources = [...rec.sources];
+    it.multiSource = rec.sources.size > 1;
     unique.push(it);
   }
 
-  // 写 store.json（与 dsh-rss-digest schema 兼容）
+  // 写 store.json（与 dsh-rss-digest schema 兼容；items 增加 sources 字段用于交叉核验）
   const store = {
     schema: 1,
     meta: { lastFetchAt: now, lastDigestAt: '', lastDigestDay: '' },
@@ -195,13 +219,15 @@ async function main() {
       link: it.link,
       summary: it.desc,
       content: '',
+      sources: it.allSources,
       publishedAt: now,
       fetchedAt: now,
     })),
   };
   writeFileSync('store.json', JSON.stringify(store, null, 2) + '\n');
 
-  log(`[完成] 原始 ${allItems.length} 条 → 去重后 ${unique.length} 条，已写入 store.json`);
+  const multi = unique.filter((it) => it.multiSource).length;
+  log(`[完成] 原始 ${allItems.length} 条 → 去重后 ${unique.length} 条（其中多源交叉确认 ${multi} 条），已写入 store.json`);
   if (failures.length) log('[警告] 失败源:', failures.join('; '));
   log('=== 新闻源抓取结束 ===');
 }

@@ -1,6 +1,7 @@
 node_modules/
 .npm-cache/
 store.json
+markets.json
 digest.md
 smoke.md
 .DS_Store

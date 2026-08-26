@@ -7,8 +7,9 @@
 ```
 GitHub Actions 定时 (cron 0 0 * * * = UTC 00:00 = 北京 08:00)
    │
-   ├─ fetch-sources.mjs   抓取 RSS（浏览器 UA、每源容错）→ store.json
-   ├─ format-digest.mjs   DeepSeek 四段式简报（头条/科技/其他/洞察）→ digest.md
+   ├─ fetch-sources.mjs   抓取 19 个 RSS 源（浏览器 UA、每源容错、多源交叉标记）→ store.json
+   ├─ fetch-markets.mjs   全球行情（新浪+腾讯+东方财富三源交叉核验）→ markets.json
+   ├─ format-digest.mjs   市场速览（脚本渲染）+ DeepSeek 财经要闻/国内/国际/后市研判 → digest.md
    └─ send-feishu.mjs     推送到飞书群 Webhook（自动分片）
 ```
 
