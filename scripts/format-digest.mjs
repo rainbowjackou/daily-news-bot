@@ -93,12 +93,14 @@ function loadItems() {
       source: titleById.get(it.sourceId) || '未知来源',
       sources: Array.isArray(it.sources) && it.sources.length ? it.sources : [titleById.get(it.sourceId) || '未知来源'],
       fetchedAt: it.fetchedAt || '',
+      publishedAt: it.publishedAt || '',
     }))
     .filter((it) => {
-      const t = Date.parse(it.fetchedAt);
+      // 按文章真实发布日期过滤（无 pubDate 时退回抓取时间）
+      const t = Date.parse(it.publishedAt || it.fetchedAt);
       return Number.isFinite(t) && t >= cutoff;
     })
-    .sort((a, b) => b.fetchedAt.localeCompare(a.fetchedAt));
+    .sort((a, b) => (b.publishedAt || b.fetchedAt).localeCompare(a.publishedAt || a.fetchedAt));
   return items;
 }
 

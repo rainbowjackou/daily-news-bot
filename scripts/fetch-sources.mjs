@@ -26,12 +26,11 @@ const SOURCES = [
   { url: 'https://www.theguardian.com/business/rss', name: '卫报商业' },
   { url: 'https://www.cnbc.com/id/100003114/device/rss/rss.html', name: 'CNBC头条' },
   { url: 'https://www.cnbc.com/id/10001147/device/rss/rss.html', name: 'CNBC经济' },
-  // ── 国内权威（强化国内新闻）──
-  { url: 'http://www.people.com.cn/rss/finance.xml', name: '人民网财经' },
-  { url: 'http://www.people.com.cn/rss/politics.xml', name: '人民网时政' },
-  { url: 'http://www.people.com.cn/rss/world.xml', name: '人民网国际' },
+  // ── 国内（强化国内新闻；人民网/新华网 RSS 已停更多年，改用中新网多频道）──
   { url: 'https://www.chinanews.com.cn/rss/scroll-news.xml', name: '中新网即时' },
   { url: 'https://www.chinanews.com.cn/rss/finance.xml', name: '中新网财经' },
+  { url: 'https://www.chinanews.com.cn/rss/world.xml', name: '中新网国际' },
+  { url: 'https://www.chinanews.com.cn/rss/society.xml', name: '中新网社会' },
   // ── 综合/科技（综合源降权，减少个人新闻占比）──
   { url: 'https://feeds.bbci.co.uk/news/rss.xml', name: 'BBC综合', max: 6 },
   { url: 'https://www.theguardian.com/world/rss', name: '卫报世界', max: 6 },
@@ -98,12 +97,20 @@ function parseFeed(xml) {
     const descM = body.match(
       /<(?:description|summary|content:encoded|content)\b[^>]*>([\s\S]*?)<\/(?:description|summary|content:encoded|content)>/i
     );
+    const dateM = body.match(/<(?:pubDate|published|updated)\b[^>]*>([^<]*)<\/(?:pubDate|published|updated)>/i);
     const title = stripHtml(titleM ? titleM[1] : '');
     if (!title) continue;
+    // 文章真实发布日期（RSS pubDate / Atom updated/published），解析失败则为空
+    let pubDate = '';
+    if (dateM) {
+      const t = Date.parse(decodeEntities(dateM[1]).trim());
+      if (Number.isFinite(t)) pubDate = new Date(t).toISOString();
+    }
     items.push({
       title: title.slice(0, 300),
       link: linkM ? decodeEntities(linkM[1] || linkM[2] || '').trim() : '',
       desc: stripHtml(descM ? descM[1] : '').slice(0, 300),
+      pubDate,
     });
   }
   return items;
@@ -164,8 +171,14 @@ async function main() {
   for (const source of SOURCES) {
     try {
       const { xml } = await fetchOne(source);
-      const items = parseFeed(xml).slice(0, source.max || MAX_ITEMS_PER_SOURCE);
-      log(`[抓取] ${source.name}: ${items.length} 条`);
+      // 只保留 48 小时内的新闻（按文章真实 pubDate；无 pubDate 的保留，交给后续校验）
+      const fresh = parseFeed(xml).filter((it) => {
+        if (!it.pubDate) return true;
+        return Date.now() - Date.parse(it.pubDate) < 48 * 3600 * 1000;
+      });
+      const items = fresh.slice(0, source.max || MAX_ITEMS_PER_SOURCE);
+      const stale = parseFeed(xml).length - fresh.length;
+      log(`[抓取] ${source.name}: ${items.length} 条${stale ? `（已过滤 ${stale} 条旧闻）` : ''}`);
       for (const it of items) {
         allItems.push({ ...it, sourceId: sourceId(source.url), sourceName: source.name });
       }
@@ -220,7 +233,7 @@ async function main() {
       summary: it.desc,
       content: '',
       sources: it.allSources,
-      publishedAt: now,
+      publishedAt: it.pubDate || now,
       fetchedAt: now,
     })),
   };
