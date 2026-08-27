@@ -3,5 +3,6 @@ node_modules/
 store.json
 markets.json
 digest.md
+stock-report.md
 smoke.md
 .DS_Store
