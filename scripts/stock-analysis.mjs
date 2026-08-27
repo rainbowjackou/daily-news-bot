@@ -28,7 +28,24 @@ const API_BASE = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').r
 const MODELS = (process.env.DEEPSEEK_MODEL || 'deepseek-chat').split(',').map((s) => s.trim()).filter(Boolean);
 const NEWS_MAX = Number(process.env.NEWS_MAX_TOPIC || 10);
 const LLM_TIMEOUT_MS = 180000;
-const FETCH_TIMEOUT_MS = 20000;
+const FETCH_TIMEOUT_MS = 25000;
+
+// 网络请求自动重试（瞬断/超时自动重试，最多 attempts 次）
+async function fetchRetry(fn, attempts = 3, label = '请求') {
+  let lastErr;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      if (i < attempts) {
+        log(`[重试] ${label} 第 ${i} 次失败（${e.message}），${3000}ms 后重试`);
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+    }
+  }
+  throw lastErr;
+}
 
 // 默认标的：贵州茅台（可改这里，或用环境变量覆盖）
 let STOCKS = [
@@ -91,49 +108,55 @@ function parseFeed(xml) {
 
 // 东财实时行情（价格字段为"分"，÷100）
 async function fetchEastmoneyQuote(secid) {
-  const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f43,f44,f45,f46,f57,f58,f60,f169,f170,f47,f48,f162,f167,f116,f117`;
-  const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-  const j = await res.json();
-  const d = j?.data;
-  if (!d || !d.f58) throw new Error('东财行情无数据');
-  const div = (v) => (typeof v === 'number' && Number.isFinite(v) ? v / 100 : null);
-  return {
-    name: d.f58, code: d.f57, src: '东方财富',
-    price: div(d.f43), prevClose: div(d.f60), open: div(d.f46),
-    high: div(d.f44), low: div(d.f45), change: div(d.f169),
-    pct: typeof d.f170 === 'number' ? d.f170 / 100 : null,
-    volume: d.f47, amount: d.f48, pe: div(d.f162), pb: div(d.f167),
-    marketCap: d.f116, floatCap: d.f117,
-  };
+  return fetchRetry(async () => {
+    const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f43,f44,f45,f46,f57,f58,f60,f169,f170,f47,f48,f162,f167,f116,f117`;
+    const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    const j = await res.json();
+    const d = j?.data;
+    if (!d || !d.f58) throw new Error('东财行情无数据');
+    const div = (v) => (typeof v === 'number' && Number.isFinite(v) ? v / 100 : null);
+    return {
+      name: d.f58, code: d.f57, src: '东方财富',
+      price: div(d.f43), prevClose: div(d.f60), open: div(d.f46),
+      high: div(d.f44), low: div(d.f45), change: div(d.f169),
+      pct: typeof d.f170 === 'number' ? d.f170 / 100 : null,
+      volume: d.f47, amount: d.f48, pe: div(d.f162), pb: div(d.f167),
+      marketCap: d.f116, floatCap: d.f117,
+    };
+  }, 3, '东财行情');
 }
 
 // 腾讯兜底行情（~分隔）
 async function fetchTencentQuote(code) {
-  const res = await fetch(`https://qt.gtimg.cn/q=${code}`, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-  const buf = Buffer.from(await res.arrayBuffer());
-  const text = buf.toString('utf8');
-  const m = text.match(/v_[^=]+="([^"]*)"/);
-  if (!m || !m[1].includes('~')) throw new Error('腾讯行情无数据');
-  const f = m[1].split('~');
-  return {
-    name: f[1], code: f[2], src: '腾讯财经',
-    price: Number(f[3]), prevClose: Number(f[4]), open: Number(f[5]),
-    high: Number(f[33]), low: Number(f[34]), change: Number(f[31]), pct: Number(f[32]),
-    volume: Number(f[6]), time: f[30],
-  };
+  return fetchRetry(async () => {
+    const res = await fetch(`https://qt.gtimg.cn/q=${code}`, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    const buf = Buffer.from(await res.arrayBuffer());
+    const text = buf.toString('utf8');
+    const m = text.match(/v_[^=]+="([^"]*)"/);
+    if (!m || !m[1].includes('~')) throw new Error('腾讯行情无数据');
+    const f = m[1].split('~');
+    return {
+      name: f[1], code: f[2], src: '腾讯财经',
+      price: Number(f[3]), prevClose: Number(f[4]), open: Number(f[5]),
+      high: Number(f[33]), low: Number(f[34]), change: Number(f[31]), pct: Number(f[32]),
+      volume: Number(f[6]), time: f[30],
+    };
+  }, 3, '腾讯行情');
 }
 
 // 东财日K线（前复权）
 async function fetchKlines(secid, lmt = 60) {
-  const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&klt=101&fqt=1&lmt=${lmt}&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57`;
-  const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-  const j = await res.json();
-  const list = j?.data?.klines;
-  if (!Array.isArray(list) || !list.length) throw new Error('K线无数据');
-  return list.map((k) => {
-    const p = k.split(',');
-    return { date: p[0], open: +p[1], close: +p[2], high: +p[3], low: +p[4], volume: +p[5], amount: +p[6] };
-  });
+  return fetchRetry(async () => {
+    const url = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&klt=101&fqt=1&lmt=${lmt}&end=20500101&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57`;
+    const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    const j = await res.json();
+    const list = j?.data?.klines;
+    if (!Array.isArray(list) || !list.length) throw new Error('K线无数据');
+    return list.map((k) => {
+      const p = k.split(',');
+      return { date: p[0], open: +p[1], close: +p[2], high: +p[3], low: +p[4], volume: +p[5], amount: +p[6] };
+    });
+  }, 3, '东财K线');
 }
 
 /* ------------------------------ 技术指标 ------------------------------ */
