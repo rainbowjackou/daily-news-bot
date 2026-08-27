@@ -138,7 +138,7 @@ function dedupeAndCap(items) {
 
 export function buildMarketSection(markets) {
   if (!markets.length) return '';
-  const groups = ['美股', '中国A股', '中国港股', '日本', '欧洲', '期货商品', '汇率'];
+  const groups = ['美股', '中国A股', '中国港股', '日本', '韩国', '欧洲', '期货商品', '汇率'];
   const byGroup = {};
   for (const m of markets) (byGroup[m.group] ||= []).push(m);
   const fmt = (v) =>

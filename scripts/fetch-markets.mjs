@@ -170,7 +170,7 @@ async function main() {
   log('=== 市场数据抓取开始 ===');
   const sinaCodes = ['sh000001', 'sz399001', 'sz399006', 'hkHSI', 'gb_$dji', 'gb_$inx', 'gb_$ixic', 'hf_GC', 'hf_CL', 'hf_OIL', 'hf_SI', 'fx_susdcny'];
   const tencentCodes = ['sh000001', 'sz399001', 'sz399006', 'hkHSI', 'usDJI', 'usINX', 'usIXIC', 'hf_GC', 'hf_CL', 'hf_OIL', 'hf_SI'];
-  const emSecids = ['100.N225', '100.FTSE', '100.DJIA', '100.NDX', '100.SPX', '100.HSI'];
+  const emSecids = ['100.N225', '100.KS11', '100.FTSE', '100.DJIA', '100.NDX', '100.SPX', '100.HSI'];
 
   const sina = {}, tencent = {}, eastmoney = {};
   await Promise.allSettled([
@@ -203,6 +203,7 @@ async function main() {
     { name: '创业板指', group: '中国A股', decimals: 2, sina: 'sz399006', tencent: 'sz399006' },
     { name: '恒生指数', group: '中国港股', decimals: 2, sina: 'hkHSI', tencent: 'hkHSI', em: 'HSI' },
     { name: '日经225', group: '日本', decimals: 2, em: 'N225' },
+    { name: '韩国KOSPI', group: '韩国', decimals: 2, em: 'KS11' },
     { name: '英国富时100', group: '欧洲', decimals: 2, em: 'FTSE' },
     { name: '纽约黄金', group: '期货商品', decimals: 2, sina: 'hf_GC', tencent: 'hf_GC' },
     { name: '纽约白银', group: '期货商品', decimals: 2, sina: 'hf_SI', tencent: 'hf_SI' },
