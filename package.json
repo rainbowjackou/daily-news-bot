@@ -2,6 +2,7 @@
   "name": "daily-news-bot",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "每日新闻简报自动化：dsh-rss-digest 抓取 RSS → DeepSeek 摘要 → 飞书推送（GitHub Actions 定时 08:00 北京时间）",
   "engines": {
     "node": ">=22.18"
