@@ -83,7 +83,6 @@ function resolveStock(text) {
 }
 
 export default async function handler(request) {
-  const url = new URL(request.url);
 
   if (request.method === 'GET') {
     return new Response('✅ DSH 股票分析桥接运行中（Vercel）', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
