@@ -22,6 +22,7 @@ async function getTenantToken(appId, appSecret) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ app_id: appId, app_secret: appSecret }),
+    signal: AbortSignal.timeout(5000),
   });
   const j = await res.json();
   if (j.code !== 0) throw new Error('获取 tenant_access_token 失败: ' + JSON.stringify(j));
@@ -34,6 +35,7 @@ async function replyToMessage(appId, appSecret, messageId, text) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ msg_type: 'text', content: JSON.stringify({ text }) }),
+    signal: AbortSignal.timeout(5000),
   });
   const j = await res.json();
   if (j.code !== 0) throw new Error('回复失败: ' + JSON.stringify(j).slice(0, 300));
@@ -51,6 +53,7 @@ async function dispatchAnalysis(payload) {
       'User-Agent': 'dsh-feishu-bridge',
     },
     body: JSON.stringify({ event_type: 'stock-analysis', client_payload: payload }),
+    signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error('dispatch 失败: HTTP ' + res.status + ' ' + (await res.text()).slice(0, 200));
 }
@@ -82,12 +85,11 @@ function resolveStock(text) {
   return null;
 }
 
-export default async function handler(request) {
+export function GET() {
+  return new Response('✅ DSH 股票分析桥接运行中（Vercel）', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+}
 
-  if (request.method === 'GET') {
-    return new Response('✅ DSH 股票分析桥接运行中（Vercel）', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
-  }
-
+export async function POST(request) {
   let body;
   try {
     body = await request.json();
@@ -118,16 +120,16 @@ export default async function handler(request) {
       if (!appId || !appSecret) {
         console.log('[配置] 缺少 FEISHU_APP_ID/SECRET');
       } else if (stock) {
-        replyToMessage(appId, appSecret, message.message_id, `📊 收到，正在分析 ${stock.name}（${stock.code}），稍等片刻…（非投资建议）`)
-          .catch((e) => console.log('[回复失败]', e.message));
-        try {
-          await dispatchAnalysis({ stock });
-          console.log('[DISPATCH] 已触发分析', stock.name);
-        } catch (e) {
-          console.log('[DISPATCH失败]', e.message);
-        }
+        // 并行执行：回复"分析中…" + 触发 GitHub 分析（必须 await，否则平台可能在响应后掐断任务）
+        const tasks = [
+          replyToMessage(appId, appSecret, message.message_id, `📊 收到，正在分析 ${stock.name}（${stock.code}），稍等片刻…（非投资建议）`)
+            .catch((e) => console.log('[回复失败]', e.message)),
+          dispatchAnalysis({ stock }).then(() => console.log('[DISPATCH] 已触发分析', stock.name))
+            .catch((e) => console.log('[DISPATCH失败]', e.message)),
+        ];
+        await Promise.allSettled(tasks);
       } else {
-        replyToMessage(appId, appSecret, message.message_id,
+        await replyToMessage(appId, appSecret, message.message_id,
           '暂未识别到股票。支持格式：\n- 代码：600519 / 00700 / NVDA\n- 名称：茅台 / 腾讯 / 英伟达\n例：@机器人 分析 600519')
           .catch(() => {});
       }
