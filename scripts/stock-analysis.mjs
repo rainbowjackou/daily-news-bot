@@ -5,7 +5,7 @@
  * 用法: node scripts/stock-analysis.mjs [--out stock-report.md]
  * 环境变量:
  *   DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL / DEEPSEEK_MODEL（同 format-digest，支持多模型逗号分隔）
- *   STOCK_SECID=1.600519  STOCK_NAME=贵州茅台  STOCK_KEYWORDS=茅台,贵州茅台（覆盖默认标的）
+ *   STOCK_SECID=0.301382  STOCK_NAME=蜂助手  STOCK_KEYWORDS=蜂助手,301382（覆盖默认标的）
  *   NEWS_MAX_TOPIC=10（相关新闻条数上限）
  * 输出: stock-report.md + digests/stock/<日期>-<代码>.md
  * 退出码: 0 正常（含 AI 降级）；1 = 行情获取失败
@@ -47,9 +47,9 @@ async function fetchRetry(fn, attempts = 3, label = '请求') {
   throw lastErr;
 }
 
-// 默认标的：贵州茅台（可改这里，或用环境变量覆盖）
+// 默认标的：蜂助手（可改这里，或用环境变量覆盖）
 let STOCKS = [
-  { secid: '1.600519', name: '贵州茅台', code: '600519', keywords: ['茅台', '贵州茅台'] },
+  { secid: '0.301382', name: '蜂助手', code: '301382', keywords: ['蜂助手', '301382'] },
 ];
 if (process.env.STOCK_SECID) {
   STOCKS = [{
@@ -126,10 +126,11 @@ async function fetchEastmoneyQuote(secid) {
   }, 3, '东财行情');
 }
 
-// 腾讯兜底行情（~分隔）
+// 腾讯兜底行情（~分隔）；code 需带交易所前缀（如 sz301382/sh600519）
 async function fetchTencentQuote(code) {
   return fetchRetry(async () => {
-    const res = await fetch(`https://qt.gtimg.cn/q=${code}`, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    const symbol = /^(sz|sh|bj)/i.test(String(code)) ? code : toTencentSymbol(String(code));
+    const res = await fetch(`https://qt.gtimg.cn/q=${symbol}`, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     const buf = Buffer.from(await res.arrayBuffer());
     const text = buf.toString('utf8');
     const m = text.match(/v_[^=]+="([^"]*)"/);
@@ -140,8 +141,18 @@ async function fetchTencentQuote(code) {
       price: Number(f[3]), prevClose: Number(f[4]), open: Number(f[5]),
       high: Number(f[33]), low: Number(f[34]), change: Number(f[31]), pct: Number(f[32]),
       volume: Number(f[6]), time: f[30],
+      // 腾讯 f[37] 成交额单位是万元，统一转成元（与东财 amount 一致）
+      amount: f[37] ? Number(f[37]) * 10000 : null,
     };
   }, 3, '腾讯行情');
+}
+
+// 纯代码 → 腾讯符号（6/9 开头沪市，其余深市；北交所 8/4 开头）
+function toTencentSymbol(code) {
+  const c = String(code).replace(/^[01]\./, '');
+  if (/^[69]/.test(c)) return `sh${c}`;
+  if (/^(4|8)/.test(c)) return `bj${c}`;
+  return `sz${c}`;
 }
 
 // 东财日K线（前复权）
