@@ -47,9 +47,10 @@ async function fetchRetry(fn, attempts = 3, label = '请求') {
   throw lastErr;
 }
 
-// 默认标的：蜂助手（可改这里，或用环境变量覆盖）
+// 默认标的：蜂助手 + 琏升科技（可改这里，或用环境变量覆盖）
 let STOCKS = [
   { secid: '0.301382', name: '蜂助手', code: '301382', keywords: ['蜂助手', '301382'] },
+  { secid: '0.300051', name: '琏升科技', code: '300051', keywords: ['琏升科技', '300051'] },
 ];
 if (process.env.STOCK_SECID) {
   STOCKS = [{
@@ -387,13 +388,11 @@ async function analyzeOne(stock) {
   }
 
   const digest = snap + '\n' + body + '\n';
-  writeFileSync(OUT, digest);
   const archiveDir = path.join(repoRoot, 'digests', 'stock');
   mkdirSync(archiveDir, { recursive: true });
   writeFileSync(path.join(archiveDir, `${dateKey()}-${stock.code}.md`), digest);
-  log(`[写入] ${OUT}（${degraded ? 'AI 降级' : 'AI 分析完整'}）`);
   log(`[归档] digests/stock/${dateKey()}-${stock.code}.md`);
-  return { stock, ok: true, degraded };
+  return { stock, ok: true, degraded, digest };
 }
 
 async function main() {
@@ -407,6 +406,14 @@ async function main() {
     }
   }
   if (results.every((r) => !r.ok)) process.exit(1);
+
+  // 所有成功标的合并写入同一份报告（多标的时避免互相覆盖）
+  const parts = results.filter((r) => r.ok && r.digest).map((r) => r.digest.trimEnd());
+  if (parts.length) {
+    const merged = parts.length > 1 ? parts.join('\n\n---\n\n') : parts[0];
+    writeFileSync(OUT, merged + '\n');
+    log(`[写入] ${OUT}（${parts.length} 只标的${results.some((r) => r.degraded) ? '，含 AI 降级' : '，AI 分析完整'}）`);
+  }
 }
 
 main().catch((e) => {
